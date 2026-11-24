@@ -1,6 +1,6 @@
 import { GnoWallet } from "@gnolang/gno-js-client";
 import { provider } from "./chain.js";
-import { NET, REALM, GAS_WANTED, GAS_FEE_UGNOT, MAX_DEPOSIT_UGNOT } from "./config.js";
+import { NET, REALM, gasFor, feeFor, depositFor } from "./config.js";
 
 const BURNER_KEY = "trickle.burner.v1";
 const LAST_KIND = "trickle.wallet.kind";
@@ -53,7 +53,8 @@ async function connectAdena() {
   return {
     kind: "adena",
     address,
-    async call(func, args, sendUgnot = 0) {
+    async call(func, args, sendUgnot = 0, streams = 1) {
+      const gas = gasFor(streams);
       const res = await adena.DoContract({
         messages: [
           {
@@ -64,12 +65,12 @@ async function connectAdena() {
               pkg_path: REALM,
               func,
               args: args.map(String),
-              max_deposit: `${MAX_DEPOSIT_UGNOT}ugnot`,
+              max_deposit: `${depositFor(streams)}ugnot`,
             },
           },
         ],
-        gasFee: GAS_FEE_UGNOT,
-        gasWanted: GAS_WANTED,
+        gasFee: feeFor(gas),
+        gasWanted: gas,
       });
       if (res.status !== "success") throw new Error(clean(res.message || res.data?.error || res.type));
       return res.data?.hash ?? "";
@@ -95,7 +96,8 @@ async function connectBurner() {
   return {
     kind: "burner",
     address,
-    async call(func, args, sendUgnot = 0) {
+    async call(func, args, sendUgnot = 0, streams = 1) {
+      const gas = gasFor(streams);
       try {
         const res = await w.callMethod(
           REALM,
@@ -103,8 +105,8 @@ async function connectBurner() {
           args,
           "broadcast_tx_commit",
           sendUgnot ? new Map([["ugnot", sendUgnot]]) : undefined,
-          new Map([["ugnot", MAX_DEPOSIT_UGNOT]]),
-          { gas_wanted: BigInt(GAS_WANTED), gas_fee: `${GAS_FEE_UGNOT}ugnot` },
+          new Map([["ugnot", depositFor(streams)]]),
+          { gas_wanted: BigInt(gas), gas_fee: `${feeFor(gas)}ugnot` },
         );
         const err = res.check_tx?.ResponseBase?.Error || res.deliver_tx?.ResponseBase?.Error;
         if (err) throw new Error(res.deliver_tx?.ResponseBase?.Log || res.check_tx?.ResponseBase?.Log || JSON.stringify(err));

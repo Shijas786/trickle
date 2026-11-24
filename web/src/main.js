@@ -1,7 +1,7 @@
 import * as chain from "./chain.js";
 import qrcode from "qrcode-generator";
 import * as sound from "./sound.js";
-import { NET, REALM_URL } from "./config.js";
+import { NET, REALM_URL, gasFor, feeFor, STORAGE_PER_STREAM_UGNOT } from "./config.js";
 import { wallet, connect, disconnect, restore, onChange, hasAdena } from "./wallet.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -74,14 +74,14 @@ requestAnimationFrame(frame);
 // ---------- transactions ----------
 
 let busy = false;
-async function send(label, func, args, sendUgnot = 0) {
+async function send(label, func, args, sendUgnot = 0, streams = 1) {
   const w = wallet();
   if (!w) return toast("Connect a wallet first.", true);
   if (busy) return;
   busy = true;
   document.body.style.cursor = "progress";
   try {
-    await w.call(func, args.map(String), sendUgnot);
+    await w.call(func, args.map(String), sendUgnot, streams);
     toast(label);
     (func === "Withdraw" ? sound.coins : sound.confirmed)();
     return true;
@@ -426,6 +426,12 @@ const toUgnot = (text) => {
 // Below one ugnot per second there is no honest six-decimal figure to quote.
 const perSecond = (ugnot) => (ugnot >= 1 ? ` (${fmt(ugnot, 6)} per second)` : "");
 
+// What the network takes on top of the streamed amount.
+function costNote(streams) {
+  const fee = feeFor(gasFor(streams));
+  return `Network fee ${fmtShort(fee)} GNOT, plus about ${fmtShort(streams * STORAGE_PER_STREAM_UGNOT)} GNOT locked as the chain's storage deposit.`;
+}
+
 function describe(sch, total) {
   return [
     `${rate(total, sch.durationS)}${perSecond(total / sch.durationS)} for ${duration(sch.durationS)}`,
@@ -459,7 +465,7 @@ async function viewNew() {
     try {
       const d = read();
       summary.className = "summary";
-      summary.textContent = `${short(d.to)} receives ${describe(d, d.total)}`;
+      summary.textContent = `${short(d.to)} receives ${describe(d, d.total)} ${costNote(1)}`;
     } catch (e) {
       summary.className = "summary muted";
       summary.textContent = e.message;
@@ -472,7 +478,7 @@ async function viewNew() {
     try { d = read(); } catch (e) { return toast(e.message, true); }
     submit.disabled = true;
     const startAt = d.delayS ? Math.floor(now()) + d.delayS : 0;
-    const ok = await send("Stream opened", "Create", [d.to, startAt, d.cliffS, d.durationS, d.cancelable, d.memo], d.total);
+    const ok = await send("Stream opened", "Create", [d.to, startAt, d.cliffS, d.durationS, d.cancelable, d.memo], d.total, d.pairs.length);
     submit.disabled = false;
     if (ok) location.hash = "#/";
   });
@@ -511,7 +517,7 @@ async function viewPayroll() {
     try {
       const d = read();
       summary.className = "summary";
-      summary.textContent = `${d.pairs.length} streams, ${fmtShort(d.total)} GNOT in total: ${describe(d, d.total)}`;
+      summary.textContent = `${d.pairs.length} streams, ${fmtShort(d.total)} GNOT in total: ${describe(d, d.total)} ${costNote(d.pairs.length)}`;
     } catch (e) {
       summary.className = "summary muted";
       summary.textContent = e.message;
@@ -524,7 +530,7 @@ async function viewPayroll() {
     try { d = read(); } catch (e) { return toast(e.message, true); }
     submit.disabled = true;
     const startAt = d.delayS ? Math.floor(now()) + d.delayS : 0;
-    const ok = await send(`${d.pairs.length} streams opened`, "CreateBatch", [d.pairs.join(","), startAt, d.cliffS, d.durationS, d.cancelable, d.memo], d.total);
+    const ok = await send(`${d.pairs.length} streams opened`, "CreateBatch", [d.pairs.join(","), startAt, d.cliffS, d.durationS, d.cancelable, d.memo], d.total, d.pairs.length);
     submit.disabled = false;
     if (ok) location.hash = "#/";
   });
