@@ -159,14 +159,17 @@ function streamCard(s) {
   const left = h("b", {}, "");
 
   let lastStatus = null;
+  let withdrawBtn = null;
   const update = (t) => {
+    // Whole ugnot only, as the realm rounds down: never show more than it will pay.
     const fine = s.canceledAt ? s.deposit - s.refunded
       : t < s.cliff || t <= s.start ? 0
       : t >= s.end ? s.deposit
-      : (s.deposit * (t - s.start)) / (s.end - s.start);
+      : Math.floor((s.deposit * (t - s.start)) / (s.end - s.start));
     const st = chain.statusOf(s, t);
     if (mine === "in") {
       amount.textContent = fmt(Math.max(0, fine - s.withdrawn));
+      if (withdrawBtn) withdrawBtn.disabled = fine - s.withdrawn <= 0;
       sub.textContent = ` GNOT to withdraw · ${fmtShort(s.deposit)} total`;
     } else {
       amount.textContent = fmt(fine);
@@ -184,6 +187,7 @@ function streamCard(s) {
       pill.className = "pill " + st;
       pill.textContent = st;
       renderActs(st);
+      update(t);
     }
   };
 
@@ -192,23 +196,28 @@ function streamCard(s) {
   };
   function renderActs(st) {
     acts.replaceChildren();
+    withdrawBtn = null;
     if (!mine || st === "canceled" || st === "settled") return;
     const live = st !== "completed";
     if (mine === "in") {
-      acts.append(h("button", {
-        class: "primary", disabled: st === "scheduled" || st === "cliff",
+      withdrawBtn = h("button", {
+        class: "primary", disabled: true,
         onclick: () => act("Withdrawn to your wallet", "Withdraw", [s.id, 0]),
-      }, "Withdraw"));
-      if (live) {
-        acts.append(
-          h("button", {
+      }, "Withdraw");
+      acts.append(
+        withdrawBtn,
+        // The realm lets a recipient hand over a stream until it is settled.
+        h("button", {
             onclick: () => {
               const to = prompt("Transfer this stream to which address?");
               if (to == null) return;
               if (!chain.isAddress(to.trim())) return toast("That is not a valid g1… address.", true);
               act("Stream transferred", "Transfer", [s.id, to.trim()]);
             },
-          }, "Transfer"),
+        }, "Transfer"),
+      );
+      if (live) {
+        acts.append(
           h("button", {
             class: "danger",
             onclick: () => confirm("Stop this stream? You keep what has unlocked; the rest returns to the sender.")
@@ -357,9 +366,12 @@ const toUgnot = (text) => {
   return Math.round(n * UGNOT);
 };
 
+// Below one ugnot per second there is no honest six-decimal figure to quote.
+const perSecond = (ugnot) => (ugnot >= 1 ? ` (${fmt(ugnot, 6)} per second)` : "");
+
 function describe(sch, total) {
   return [
-    `${rate(total, sch.durationS)} (${fmt(total / sch.durationS, 6)} per second) for ${duration(sch.durationS)}`,
+    `${rate(total, sch.durationS)}${perSecond(total / sch.durationS)} for ${duration(sch.durationS)}`,
     sch.cliffS ? `, first withdrawal after ${duration(sch.cliffS)}` : "",
     sch.delayS ? `, starting in ${duration(sch.delayS)}` : ", starting now",
     sch.cancelable ? ". You can cancel any time." : ". Cannot be canceled by you.",
@@ -427,7 +439,8 @@ async function viewPayroll() {
     if (rows.length > 50) throw new Error("At most 50 recipients per payroll.");
     let total = 0;
     const pairs = rows.map((line, i) => {
-      const [addr, amt] = line.split(/[,\s]+/);
+      const [, addr = "", amt = ""] = /^(\S+?)[,\s]+(.+)$/.exec(line) ?? [];
+      if (/[,\s]/.test(amt)) throw new Error(`Line ${i + 1}: write the amount without separators, like 1200.5.`);
       const u = toUgnot(amt);
       if (!chain.isAddress(addr || "")) throw new Error(`Line ${i + 1}: not a valid g1… address.`);
       if (addr === wallet()?.address) throw new Error(`Line ${i + 1}: you cannot stream to yourself.`);
