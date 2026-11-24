@@ -1,5 +1,4 @@
 import { GnoJSONRPCProvider } from "@gnolang/gno-js-client";
-import { fromBech32 } from "@cosmjs/encoding";
 import { NET, REALM } from "./config.js";
 
 let providerPromise;
@@ -55,14 +54,23 @@ async function evalJSON(expr) {
 
 // Full Bech32 check, checksum included: a mistyped address must be caught
 // here, not by a transaction that fails after its fee is paid.
-function isAddress(a) {
-  if (!/^g1[0-9a-z]{38}$/.test(a)) return false;
-  try {
-    const { prefix, data } = fromBech32(a);
-    return prefix === "g" && data.length === 20;
-  } catch {
-    return false;
+const B32 = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+const B32_GEN = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
+function bech32Polymod(values) {
+  let chk = 1;
+  for (const v of values) {
+    const top = chk >>> 25;
+    chk = ((chk & 0x1ffffff) << 5) ^ v;
+    for (let i = 0; i < 5; i++) if ((top >>> i) & 1) chk ^= B32_GEN[i];
   }
+  return chk >>> 0;
+}
+function isAddress(a) {
+  // "g1" + 32 data characters (20 bytes) + 6 checksum characters.
+  if (typeof a !== "string" || !/^g1[02-9ac-hj-np-z]{38}$/.test(a)) return false;
+  const words = [...a.slice(2)].map((c) => B32.indexOf(c));
+  // Human-readable part "g" expands to [high bits, 0, low bits].
+  return bech32Polymod([0x67 >> 5, 0, 0x67 & 31, ...words]) === 1;
 }
 
 export const stats = () => evalJSON("StatsJSON()");
