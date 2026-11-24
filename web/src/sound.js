@@ -2,12 +2,18 @@
 // before the user's first click, and the choice to mute is remembered.
 const KEY = "trickle.muted";
 let ctx;
-let muted = localStorage.getItem(KEY) === "1";
+let muted = false;
+// Storage can be blocked by the browser; sound settings must never stop the app.
+try {
+  muted = localStorage.getItem(KEY) === "1";
+} catch {}
 
 export const isMuted = () => muted;
 export function setMuted(value) {
   muted = value;
-  localStorage.setItem(KEY, value ? "1" : "0");
+  try {
+    localStorage.setItem(KEY, value ? "1" : "0");
+  } catch {}
 }
 
 function tone(freq, start, length, gain, type = "sine") {
