@@ -451,7 +451,7 @@ async function viewNew() {
     h("input", { id: "amt", type: "text", inputmode: "decimal", placeholder: "100", required: true, autocomplete: "off" }),
     scheduleFields(),
     summary,
-    h("div", { class: "submit" }, submit, h("span", { class: "muted small" }, "Network fee about 0.1 GNOT, plus a refundable storage deposit of about 0.5 GNOT.")),
+    h("div", { class: "submit" }, submit),
   );
   const read = () => {
     const to = $("#to", form).value.trim();
@@ -478,7 +478,7 @@ async function viewNew() {
     try { d = read(); } catch (e) { return toast(e.message, true); }
     submit.disabled = true;
     const startAt = d.delayS ? Math.floor(now()) + d.delayS : 0;
-    const ok = await send("Stream opened", "Create", [d.to, startAt, d.cliffS, d.durationS, d.cancelable, d.memo], d.total, d.pairs.length);
+    const ok = await send("Stream opened", "Create", [d.to, startAt, d.cliffS, d.durationS, d.cancelable, d.memo], d.total);
     submit.disabled = false;
     if (ok) location.hash = "#/";
   });

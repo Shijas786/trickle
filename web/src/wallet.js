@@ -2,6 +2,15 @@ import { GnoWallet } from "@gnolang/gno-js-client";
 import { provider } from "./chain.js";
 import { NET, REALM, gasFor, feeFor, depositFor } from "./config.js";
 
+// Browsers can block site storage; fall back to memory so the app still works
+// for the visit (the demo wallet is then forgotten on reload).
+const memory = new Map();
+const store = {
+  getItem(k) { try { return localStorage.getItem(k); } catch { return memory.get(k) ?? null; } },
+  setItem(k, v) { try { localStorage.setItem(k, v); } catch { memory.set(k, v); } },
+  removeItem(k) { try { localStorage.removeItem(k); } catch { memory.delete(k); } },
+};
+
 const BURNER_KEY = "trickle.burner.v1";
 const LAST_KIND = "trickle.wallet.kind";
 
@@ -79,10 +88,10 @@ async function connectAdena() {
 }
 
 function burnerKey() {
-  let hex = localStorage.getItem(BURNER_KEY);
+  let hex = store.getItem(BURNER_KEY);
   if (!hex) {
     hex = Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, "0")).join("");
-    localStorage.setItem(BURNER_KEY, hex);
+    store.setItem(BURNER_KEY, hex);
   }
   return Uint8Array.from(hex.match(/../g), (h) => parseInt(h, 16));
 }
@@ -124,19 +133,19 @@ async function connectBurner() {
 
 export async function connect(kind) {
   current = kind === "adena" ? await connectAdena() : await connectBurner();
-  localStorage.setItem(LAST_KIND, kind);
+  store.setItem(LAST_KIND, kind);
   emit();
   return current;
 }
 
 export function disconnect() {
   current = null;
-  localStorage.removeItem(LAST_KIND);
+  store.removeItem(LAST_KIND);
   emit();
 }
 
 export async function restore() {
-  const kind = localStorage.getItem(LAST_KIND);
+  const kind = store.getItem(LAST_KIND);
   if (kind === "burner" || (kind === "adena" && hasAdena())) {
     try {
       await connect(kind);
