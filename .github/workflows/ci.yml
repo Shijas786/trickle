@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  GNO_REF: fc79041f4cd1a7b3ed4b316dc5ac14162eb78730 # v1.8.0-rc.1
+
+jobs:
+  gno:
+    name: Gno tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: gnolang/gno
+          ref: ${{ env.GNO_REF }}
+          path: .gno-src
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: .gno-src/go.mod
+          cache-dependency-path: .gno-src/go.sum
+      - name: Install gno
+        run: make -C .gno-src/gnovm install
+      - name: Test package and realm
+        working-directory: gno
+        env:
+          GNOROOT: ${{ github.workspace }}/.gno-src
+        run: gno test -v ./...
+
+  web:
+    name: Web build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npm run build
+        working-directory: web
