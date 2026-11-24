@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Trickle: money that arrives every second</title>
+    <meta name="description" content="Per-second GNOT payment streams on Gno.land: salaries, grants, vesting and subscriptions." />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M16 3c5 7 9 11 9 17a9 9 0 0 1-18 0c0-6 4-10 9-17z' fill='%2334d399'/></svg>" />
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <header class="top">
+      <a class="brand" href="#/">
+        <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true"><path d="M16 3c5 7 9 11 9 17a9 9 0 0 1-18 0c0-6 4-10 9-17z" fill="currentColor" /></svg>
+        Trickle
+      </a>
+      <nav id="nav">
+        <a href="#/" data-tab="home">My streams</a>
+        <a href="#/new" data-tab="new">New stream</a>
+        <a href="#/payroll" data-tab="payroll">Payroll</a>
+        <a href="#/explore" data-tab="explore">Explore</a>
+      </nav>
+      <div id="wallet"></div>
+    </header>
+    <main id="app"></main>
+    <footer>
+      <span id="net"></span>
+      <button id="mute" type="button" class="ghost"></button>
+      <a id="realm-link" target="_blank" rel="noopener">View the realm on gno.land</a>
+    </footer>
+    <div id="toasts" aria-live="polite"></div>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
