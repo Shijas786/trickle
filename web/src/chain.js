@@ -1,4 +1,5 @@
 import { GnoJSONRPCProvider } from "@gnolang/gno-js-client";
+import { fromBech32 } from "@cosmjs/encoding";
 import { NET, REALM } from "./config.js";
 
 let providerPromise;
@@ -7,12 +8,44 @@ export function provider() {
   return providerPromise;
 }
 
-// qeval answers `("<go-quoted string>" string)`; our realm only returns JSON
-// built from validated UTF-8, so the Go quoting is also valid JSON quoting.
+// qeval answers `("<go-quoted string>" string)`. Go quoting is not JSON
+// quoting (\x7f, \U000e0067, \a, \v), so decode it by Go's rules.
+const SIMPLE = { a: "\x07", b: "\b", f: "\f", n: "\n", r: "\r", t: "\t", v: "\v", "\\": "\\", '"': '"', "'": "'" };
+export function goUnquote(quoted) {
+  const body = quoted.slice(1, -1);
+  const bytes = [];
+  const enc = new TextEncoder();
+  const push = (text) => bytes.push(...enc.encode(text));
+  for (let i = 0; i < body.length; ) {
+    if (body[i] !== "\\") {
+      const cp = body.codePointAt(i);
+      const ch = String.fromCodePoint(cp);
+      push(ch);
+      i += ch.length;
+      continue;
+    }
+    const c = body[i + 1];
+    if (c in SIMPLE) { push(SIMPLE[c]); i += 2; continue; }
+    const hex = (len, radix = 16) => {
+      const digits = body.slice(i + 2, i + 2 + len);
+      const n = parseInt(digits, radix);
+      if (digits.length !== len || Number.isNaN(n)) throw new Error("bad escape in response");
+      i += 2 + len;
+      return n;
+    };
+    if (c === "x") bytes.push(hex(2));
+    else if (c === "u") push(String.fromCodePoint(hex(4)));
+    else if (c === "U") push(String.fromCodePoint(hex(8)));
+    else if (c >= "0" && c <= "7") { i -= 1; bytes.push(hex(3, 8)); }
+    else throw new Error("bad escape in response");
+  }
+  return new TextDecoder().decode(new Uint8Array(bytes));
+}
+
 function unwrap(result) {
   const m = /^\((".*") string\)\s*$/s.exec(result);
   if (!m) throw new Error("unexpected response: " + result.slice(0, 120));
-  return JSON.parse(JSON.parse(m[1]));
+  return JSON.parse(goUnquote(m[1]));
 }
 
 async function evalJSON(expr) {
@@ -20,19 +53,37 @@ async function evalJSON(expr) {
   return unwrap(await p.evaluateExpression(REALM, expr));
 }
 
-const isAddress = (a) => /^g1[0-9a-z]{38}$/.test(a);
+// Full Bech32 check, checksum included: a mistyped address must be caught
+// here, not by a transaction that fails after its fee is paid.
+function isAddress(a) {
+  if (!/^g1[0-9a-z]{38}$/.test(a)) return false;
+  try {
+    const { prefix, data } = fromBech32(a);
+    return prefix === "g" && data.length === 20;
+  } catch {
+    return false;
+  }
+}
 
 export const stats = () => evalJSON("StatsJSON()");
 export const latest = (limit = 50) => evalJSON(`LatestJSON(0,${limit})`);
 export const stream = (id) => evalJSON(`StreamJSON(${Number(id)})`);
-export async function incoming(addr) {
+// The realm serves at most PAGE streams per call; walk the pages so an old
+// stream with unclaimed funds is never hidden behind newer ones.
+const PAGE = 50;
+const MAX_PAGES = 20;
+async function allOf(fn, addr) {
   if (!isAddress(addr)) return [];
-  return evalJSON(`IncomingJSON("${addr}",0,50)`);
+  const all = [];
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const part = await evalJSON(`${fn}("${addr}",${page * PAGE},${PAGE})`);
+    all.push(...part);
+    if (part.length < PAGE) break;
+  }
+  return all;
 }
-export async function outgoing(addr) {
-  if (!isAddress(addr)) return [];
-  return evalJSON(`OutgoingJSON("${addr}",0,50)`);
-}
+export const incoming = (addr) => allOf("IncomingJSON", addr);
+export const outgoing = (addr) => allOf("OutgoingJSON", addr);
 export async function balance(addr) {
   const p = await provider();
   return p.getBalance(addr, "ugnot");
