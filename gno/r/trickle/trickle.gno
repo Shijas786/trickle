@@ -12,6 +12,7 @@ import (
 	"chain"
 	"chain/banker"
 	"chain/runtime/unsafe"
+	"crypto/bech32"
 	"strconv"
 	"strings"
 	"time"
@@ -175,9 +176,7 @@ func Transfer(cur realm, id uint64, to address) {
 	if caller != r.Recipient {
 		panic("only the recipient can transfer a stream")
 	}
-	if !to.IsValid() {
-		panic("invalid address")
-	}
+	mustBeCanonical(to)
 	if to == r.Sender || to == r.Recipient {
 		panic("new recipient must differ from the sender and the current recipient")
 	}
@@ -238,6 +237,7 @@ func open(now int64, sender, recipient address, amount, startAt, cliffSeconds, d
 		panic("start time is too far in the future")
 	}
 	checkMemo(memo)
+	mustBeCanonical(recipient)
 
 	s, err := trickle.New(sender, recipient, amount, startAt, startAt+cliffSeconds, startAt+durationSeconds, cancelable)
 	if err != nil {
@@ -260,6 +260,21 @@ func open(now int64, sender, recipient address, amount, startAt, cliffSeconds, d
 		"end", strconv.FormatInt(s.End, 10),
 	)
 	return uint64(id)
+}
+
+// mustBeCanonical rejects any spelling of an address other than the one the
+// chain reports for a caller. IsValid also accepts an all-uppercase or
+// Bech32m spelling, and a stream stored under one of those could never be
+// withdrawn, because Withdraw compares against the caller's canonical address.
+func mustBeCanonical(a address) {
+	if a.IsValid() {
+		if hrp, data, err := bech32.DecodeNoLimit(a.String()); err == nil {
+			if enc, err := bech32.Encode(hrp, data); err == nil && enc == a.String() {
+				return
+			}
+		}
+	}
+	panic("invalid address: use the lowercase g1... form")
 }
 
 func checkMemo(memo string) {

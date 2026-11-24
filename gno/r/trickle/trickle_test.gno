@@ -124,6 +124,14 @@ func TestTransfer(cur realm, t *testing.T) {
 
 	uassert.True(t, strings.Contains(IncomingJSON(carol, 0, 10), `"deposit":1000`))
 	uassert.False(t, strings.Contains(IncomingJSON(bob, 0, 10), `"deposit":1000,`))
+
+	// A fully unlocked stream with unclaimed funds can still be handed over.
+	setTime(3_000_200)
+	Transfer(cross(cur), id, bob)
+	testing.SetRealm(testing.NewUserRealm(bob))
+	send(bob, 0)
+	uassert.Equal(t, int64(500), Withdraw(cross(cur), id, 0))
+	uassert.AbortsContains(t, cur, "finished", func() { Transfer(cross(cur), id, carol) })
 }
 
 func TestCreateBatch(cur realm, t *testing.T) {
@@ -163,7 +171,11 @@ func TestCreateValidation(cur realm, t *testing.T) {
 	uassert.AbortsContains(t, cur, "cliffSeconds", func() { Create(cross(cur), bob, 0, 200, 100, true, "") })
 	uassert.AbortsContains(t, cur, "cliffSeconds", func() { Create(cross(cur), bob, 0, 0, 0, true, "") })
 	uassert.AbortsContains(t, cur, "must differ", func() { Create(cross(cur), alice, 0, 0, 100, true, "") })
-	uassert.AbortsContains(t, cur, "invalid sender or recipient", func() { Create(cross(cur), address("g1nope"), 0, 0, 100, true, "") })
+	uassert.AbortsContains(t, cur, "invalid address", func() { Create(cross(cur), address("g1nope"), 0, 0, 100, true, "") })
+	// A valid but non-canonical spelling could never be withdrawn from.
+	uassert.AbortsContains(t, cur, "invalid address", func() {
+		Create(cross(cur), address(strings.ToUpper(bob.String())), 0, 0, 100, true, "")
+	})
 	uassert.AbortsContains(t, cur, "control characters", func() { Create(cross(cur), bob, 0, 0, 100, true, "a\nb") })
 	uassert.AbortsContains(t, cur, "memo", func() { Create(cross(cur), bob, 0, 0, 100, true, strings.Repeat("x", 81)) })
 }
@@ -232,6 +244,11 @@ func TestRender(cur realm, t *testing.T) {
 	uassert.False(t, strings.Contains(page, "](http://evil)"))
 
 	uassert.True(t, strings.Contains(Render("account/"+bob.String()), "## Incoming"))
+	older := Render("account/" + bob.String() + "/2")
+	uassert.True(t, strings.Contains(older, "[Newer]("))
+	uassert.False(t, strings.Contains(older, "[Older]("))
+	uassert.True(t, strings.Contains(Render("account/"+bob.String()+"/0"), "Not found"))
+	uassert.True(t, strings.Contains(Render("account/"+bob.String()+"/x"), "Not found"))
 	uassert.True(t, strings.Contains(Render("stream/999999"), "Not found"))
 	uassert.True(t, strings.Contains(Render("account/<script>"), "Not found"))
 	uassert.True(t, strings.Contains(Render("nope"), "Not found"))

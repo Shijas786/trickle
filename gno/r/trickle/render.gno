@@ -12,6 +12,7 @@ import (
 const (
 	realmPath = "/r/g1a04glq8w6ts7r9yzyznpa99qkzwp8pewcf3aef/trickle"
 	pageSize  = 20
+	maxPages  = 1 << 20
 	barWidth  = 24
 )
 
@@ -36,11 +37,21 @@ func Render(path string) string {
 		}
 		return renderStream(r, now)
 	case strings.HasPrefix(path, "account/"):
-		addr := address(strings.TrimPrefix(path, "account/"))
+		// account/<addr> or account/<addr>/<page>, pages counted from 1.
+		rest, pageStr, paged := strings.Cut(strings.TrimPrefix(path, "account/"), "/")
+		page := 1
+		if paged {
+			n, err := strconv.Atoi(pageStr)
+			if err != nil || n < 1 || n > maxPages {
+				return notFound()
+			}
+			page = n
+		}
+		addr := address(rest)
 		if !addr.IsValid() {
 			return notFound()
 		}
-		return renderAccount(addr, now)
+		return renderAccount(addr, page, now)
 	}
 	return notFound()
 }
@@ -80,13 +91,20 @@ func renderHome(now int64) string {
 	return b.String()
 }
 
-func renderAccount(addr address, now int64) string {
+func renderAccount(addr address, page int, now int64) string {
 	var b strings.Builder
 	b.WriteString("# Streams of " + addr.String() + "\n\n[Back to Trickle](" + realmPath + ")\n\n")
+	offset := (page - 1) * maxPageSize
+	more := false
 	section := func(title string, index *avl.Tree) {
 		b.WriteString("## " + title + "\n\n")
 		n := 0
-		eachOf(index, addr, 0, maxPageSize, func(r *Record) {
+		// One extra row tells whether an older page exists.
+		eachOf(index, addr, offset, maxPageSize+1, func(r *Record) {
+			if n == maxPageSize {
+				more = true
+				return
+			}
 			if n == 0 {
 				b.WriteString(tableHeader)
 			}
@@ -100,6 +118,17 @@ func renderAccount(addr address, now int64) string {
 	}
 	section("Incoming", byRecipient)
 	section("Outgoing", bySender)
+	base := realmPath + ":account/" + addr.String() + "/"
+	if page > 1 {
+		b.WriteString("[Newer](" + base + strconv.Itoa(page-1) + ")")
+	}
+	if more {
+		if page > 1 {
+			b.WriteString(" · ")
+		}
+		b.WriteString("[Older](" + base + strconv.Itoa(page+1) + ")")
+	}
+	b.WriteString("\n")
 	return b.String()
 }
 
@@ -137,9 +166,9 @@ func renderStream(r *Record, now int64) string {
 
 	if !r.IsCanceled() && r.Withdrawn < r.Deposit {
 		b.WriteString("\n[Withdraw](" + realmPath + "$help&func=Withdraw&id=" + id + "&amount=0)")
+		b.WriteString(" · [Transfer](" + realmPath + "$help&func=Transfer&id=" + id + ")")
 		if now < r.End {
 			b.WriteString(" · [Cancel](" + realmPath + "$help&func=Cancel&id=" + id + ")")
-			b.WriteString(" · [Transfer](" + realmPath + "$help&func=Transfer&id=" + id + ")")
 		}
 		b.WriteString("\n")
 	}
