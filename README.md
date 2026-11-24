@@ -9,7 +9,7 @@ Built for the [Gnome Tavern](https://dorahacks.io/hackathon/gnome-tavern/detail)
 | Network | Gno.land Onyx testnet (`onyx-1`) |
 | Realm | `gno.land/r/g1a04glq8w6ts7r9yzyznpa99qkzwp8pewcf3aef/trickle` |
 | Package | `gno.land/p/g1a04glq8w6ts7r9yzyznpa99qkzwp8pewcf3aef/trickle` |
-| Realm deploy tx | `irJVx4z6rmG7SbJmnH6buQSmRz8h3IeB9hCR7l4GPwI=` (block 1387443) |
+| Realm deploy tx | `UpZyIYf2BYb54w3JUajjs2dFEFsCRjoUJlFH43b1xp0=` (block 1387695) |
 | Package deploy tx | `CfFQcwlGWnFPDD8EjEPya0lzDyfuoSRKMah3NC8d4LM=` (block 1387440) |
 
 Onyx stores a new package first and activates it once the chain's package approver enables it. See [Deployment](#deployment) for how to check the state.
@@ -22,7 +22,7 @@ Onyx stores a new package first and activates it once the chain's package approv
 - **Commitments.** A stream opened as non-cancelable cannot be clawed back, which is what vesting needs.
 - **Transferable.** The recipient can hand a stream to another address.
 - **Payroll.** One transaction opens up to 50 streams on the same schedule.
-- **Readable on chain.** The realm renders its own pages (home, `:stream/<id>`, `:account/<addr>`) in gnoweb, with progress bars and action links, so it is usable without the web app.
+- **Readable on chain.** The realm renders its own pages (home, `:stream/<id>`, `:account/<addr>` with older pages at `:account/<addr>/<page>`) in gnoweb, with progress bars and action links, so it is usable without the web app.
 
 ## How it is built
 
@@ -59,7 +59,7 @@ Vesting is computed with a 128-bit intermediate (`math/bits`), so `deposit * ela
 | `CreateBatch("g1..:amount,g1..:amount", ...)` | anyone, sending the exact total | opens one stream per recipient |
 | `Withdraw(id, amount)` | recipient | pays out unlocked GNOT (`0` = all) |
 | `Cancel(id)` | sender if cancelable, or recipient | settles both sides and closes the stream |
-| `Transfer(id, to)` | recipient | moves the stream to another address |
+| `Transfer(id, to)` | recipient | moves the stream to another address, until it is fully withdrawn |
 
 Read side, for apps and indexers: `StreamJSON`, `StatsJSON`, `LatestJSON`, `IncomingJSON`, `OutgoingJSON` (paginated, served from sender and recipient indexes), plus `Withdrawable` and `Count`. Every state change emits an event (`StreamCreated`, `StreamWithdrawn`, `StreamCanceled`, `StreamTransferred`).
 
@@ -70,6 +70,7 @@ Read side, for apps and indexers: `StreamJSON`, `StatsJSON`, `LatestJSON`, `Inco
 - **Checks before effects.** Stream state is updated before coins leave the realm.
 - **No pointers to state leak.** Queries return JSON strings and values, never a pointer into the stream tree.
 - **Render is treated as hostile input.** Path segments are parsed, not echoed, and memos go through `sanitize.InlineText` / `sanitize.TableCell`. Memos are also length-limited and rejected if they contain control characters.
+- **Canonical addresses only.** Recipients must be spelled the way the chain spells a caller (lowercase Bech32). Other spellings that pass `IsValid` are rejected, because a stream stored under one could never be withdrawn.
 - **Bounded work.** Pages are capped at 50 items, batches at 50 recipients, durations at 100 years.
 
 ## Run it locally
