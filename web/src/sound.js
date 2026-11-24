@@ -29,11 +29,19 @@ function tone(freq, start, length, gain, type = "sine") {
   osc.stop(ctx.currentTime + start + length + 0.02);
 }
 
-function play(notes) {
-  if (muted) return;
+// Browsers only start audio from a user gesture. Until then sounds are
+// skipped, not queued, so nothing piles up and plays at once later.
+function unlock() {
   try {
     ctx ??= new (window.AudioContext || window.webkitAudioContext)();
     if (ctx.state === "suspended") ctx.resume();
+  } catch {}
+}
+for (const type of ["pointerdown", "keydown"]) window.addEventListener(type, unlock, { passive: true });
+
+function play(notes) {
+  if (muted || ctx?.state !== "running") return;
+  try {
     for (const n of notes) tone(...n);
   } catch {
     // Audio is decoration; never let it break a transaction flow.
