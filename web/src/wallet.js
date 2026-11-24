@@ -4,6 +4,16 @@ import { NET, REALM, gasFor, feeFor, depositFor } from "./config.js";
 
 // Browsers can block site storage; fall back to memory so the app still works
 // for the visit (the demo wallet is then forgotten on reload).
+// False when the demo wallet's key cannot outlive this page.
+export function storagePersists() {
+  try {
+    localStorage.setItem("trickle.probe", "1");
+    localStorage.removeItem("trickle.probe");
+    return true;
+  } catch {
+    return false;
+  }
+}
 const memory = new Map();
 const store = {
   getItem(k) { try { return localStorage.getItem(k); } catch { return memory.get(k) ?? null; } },

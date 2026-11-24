@@ -2,7 +2,7 @@ import * as chain from "./chain.js";
 import qrcode from "qrcode-generator";
 import * as sound from "./sound.js";
 import { NET, REALM_URL, gasFor, feeFor, STORAGE_PER_STREAM_UGNOT } from "./config.js";
-import { wallet, connect, disconnect, restore, onChange, hasAdena } from "./wallet.js";
+import { wallet, connect, disconnect, restore, onChange, hasAdena, storagePersists } from "./wallet.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const app = $("#app");
@@ -144,6 +144,9 @@ function renderWallet() {
 async function doConnect(kind) {
   try {
     await connect(kind);
+    if (kind === "burner" && !storagePersists()) {
+      toast("This browser blocks site storage: the demo wallet will be forgotten on reload. Do not fund it.", true);
+    }
   } catch (e) {
     toast(e.message || String(e), true);
   }
@@ -301,7 +304,9 @@ async function viewHome() {
   const [inc, out] = await Promise.all([chain.incoming(w.address), chain.outgoing(w.address)]);
   return [
     myBalance === 0 && h("div", { class: "banner" },
-      h("span", {}, "This wallet has no testnet GNOT yet. Copy your address and request some from the faucet."),
+      h("span", {}, wallet().kind === "burner" && !storagePersists()
+        ? "This browser blocks site storage, so this demo wallet is forgotten when the page reloads and anything sent to it is lost. Allow storage for this site, or use Adena, before funding it."
+        : "This wallet has no testnet GNOT yet. Copy your address and request some from the faucet."),
       h("span", { style: "display:flex;gap:8px" },
         h("button", { onclick: () => navigator.clipboard?.writeText(w.address).then(() => toast("Address copied")) }, "Copy address"),
         NET.faucet && h("a", { class: "btn primary", href: NET.faucet, target: "_blank", rel: "noopener" }, "Open faucet"),
