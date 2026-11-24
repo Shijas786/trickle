@@ -12,11 +12,26 @@ const emit = () => listeners.forEach((fn) => fn(current));
 export const wallet = () => current;
 export const hasAdena = () => typeof window.adena !== "undefined";
 
+const KNOWN_ERRORS = [
+  [/InsufficientCoins|InsufficientFunds|insufficient (coins|funds)/i, "This wallet does not hold enough GNOT for that amount plus the network fee."],
+  [/OutOfGas|out of gas/i, "The transaction ran out of gas. Try again."],
+  [/UnknownAddress|unknown address/i, "This wallet has no GNOT yet. Fund it from the faucet first."],
+  [/InvalidSequence|sequence/i, "The wallet was busy with another transaction. Try again."],
+  [/reject|denied|cancell?ed by user/i, "You rejected the transaction in the wallet."],
+  [/Failed to fetch|NetworkError|timeout/i, "Could not reach the network. Check your connection and try again."],
+];
+
 function clean(message) {
-  const text = String(message ?? "transaction failed");
+  const text = String(message?.message ?? message ?? "transaction failed");
   // Realm panics come back wrapped in VM traces; keep the human part.
   const m = /Data: (.*?)(\n|$)/.exec(text) || /panic: (.*?)(\n|$)/.exec(text);
-  return (m ? m[1] : text).replace(/^(errors\.\w+|&errors\.\w+)?\{?s?:?"?/, "").slice(0, 240);
+  const core = (m ? m[1] : text).replace(/^(errors\.\w+|&errors\.\w+)?\{?s?:?"?/, "").replace(/"?\}?$/, "");
+  for (const [pattern, friendly] of KNOWN_ERRORS) {
+    if (pattern.test(text) && (!m || /abciError|^\w+(\.\w+)*\{/.test(m[1]))) return friendly;
+  }
+  // Anything that still looks like a Go value is not worth showing.
+  if (/^\w+\.\w+\{|abciError/.test(core)) return "The transaction failed on chain. Nothing was sent apart from the network fee.";
+  return core.slice(0, 240);
 }
 
 async function connectAdena() {
@@ -39,7 +54,7 @@ async function connectAdena() {
     kind: "adena",
     address,
     async call(func, args, sendUgnot = 0) {
-      const res = await adena.DoContractCall({
+      const res = await adena.DoContract({
         messages: [
           {
             type: "/vm.m_call",
@@ -48,7 +63,7 @@ async function connectAdena() {
               send: sendUgnot ? `${sendUgnot}ugnot` : "",
               pkg_path: REALM,
               func,
-              args,
+              args: args.map(String),
               max_deposit: `${MAX_DEPOSIT_UGNOT}ugnot`,
             },
           },
