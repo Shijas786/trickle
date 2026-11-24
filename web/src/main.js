@@ -335,7 +335,9 @@ function liveWall(list) {
     total.textContent = fmt(unlocked);
     perSec.textContent = fmt(flow) + " GNOT";
     active.textContent = n;
-    const whole = Math.floor(unlocked / UGNOT);
+    // The chime marks GNOT the realm has really unlocked: whole seconds only.
+    const sec = Math.floor(t);
+    const whole = Math.floor(list.reduce((sum, s) => sum + chain.vested(s, sec), 0) / UGNOT);
     if (lastWhole !== null && whole > lastWhole) {
       total.classList.remove("pulse");
       void total.offsetWidth;
