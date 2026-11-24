@@ -242,7 +242,7 @@ function streamCard(s) {
   }
 
   const card = h("div", { class: "card" },
-    h("div", { class: "head" }, h("a", { href: `${REALM_URL}:stream/${s.id}`, target: "_blank", rel: "noopener" }, `Stream #${s.id}`), pill),
+    h("div", { class: "head" }, h("a", { href: `#/s/${s.id}`, title: "Open this stream's live payslip" }, `Stream #${s.id}`), pill),
     h("div", { class: "amount" }, amount, sub),
     h("div", { class: "bar" }, fill, paid),
     s.memo && h("div", { class: "memo" }, s.memo),
@@ -285,6 +285,7 @@ async function viewHome() {
       h("section", { class: "hero" },
         h("div", {},
           h("h1", {}, "Money that arrives every second."),
+          h("p", { class: "tagline" }, "86,400 paydays a day, on Gno.land."),
           h("p", { class: "lead" }, "Lock GNOT once and it unlocks for the recipient continuously: salaries, grants, vesting with a cliff, subscriptions. They withdraw whenever they like. Cancel any time and only the unearned part comes back."),
           h("div", { class: "actions" },
             h("button", { class: "primary", onclick: () => doConnect("burner") }, "Try it with a demo wallet"),
@@ -543,6 +544,63 @@ async function viewPayroll() {
   return [h("h1", {}, "Payroll"), h("p", { class: "lead" }, "Pay a whole team on the same schedule in a single transaction."), form];
 }
 
+// A payslip anyone can open from a shared link: the recipient watches the
+// money arrive, no wallet needed to look.
+async function viewPayslip(id) {
+  const [st, s] = await Promise.all([chain.stats(), chain.stream(id)]);
+  clockOffset = st.now - Date.now() / 1000;
+  const big = h("div", { class: "slip-amount amount" }, "");
+  const status = h("span", { class: "pill" }, "");
+  const fill = h("i", {});
+  const facts = h("div", { class: "slip-facts" });
+  let lastWhole = null;
+  const update = (t) => {
+    const st2 = chain.statusOf(s, t);
+    let v = chain.vested(s, t);
+    if (st2 === "streaming") v += (s.deposit / (s.end - s.start)) * (t - Math.floor(t));
+    big.textContent = fmt(Math.min(v, s.deposit));
+    status.className = "pill " + st2;
+    status.textContent = st2;
+    fill.style.width = ((100 * Math.min(v, s.deposit)) / s.deposit).toFixed(3) + "%";
+    const whole = Math.floor(chain.vested(s, Math.floor(t)) / UGNOT);
+    if (lastWhole !== null && whole > lastWhole) sound.drop();
+    lastWhole = whole;
+  };
+  update(now());
+  tickers.add(update);
+  facts.append(
+    h("div", {}, h("span", {}, "From"), h("b", { class: "mono" }, short(s.sender))),
+    h("div", {}, h("span", {}, "To"), h("b", { class: "mono" }, short(s.recipient))),
+    h("div", {}, h("span", {}, "Rate"), h("b", {}, rate(s.deposit, s.end - s.start))),
+    h("div", {}, h("span", {}, "Total"), h("b", {}, fmtShort(s.deposit) + " GNOT over " + duration(s.end - s.start))),
+  );
+  const link = location.href;
+  const share = async () => {
+    const text = `Watch this GNOT arrive every second${s.memo ? ` (${s.memo})` : ""}`;
+    if (navigator.share) {
+      try { await navigator.share({ title: "Trickle payslip", text, url: link }); return; } catch {}
+    }
+    await navigator.clipboard?.writeText(link);
+    toast("Link copied");
+  };
+  const wa = `https://wa.me/?text=${encodeURIComponent("Watch this GNOT arrive every second: " + link)}`;
+  return [
+    h("section", { class: "slip" },
+      h("div", { class: "slip-head" }, h("span", { class: "muted" }, `Payslip · Stream #${s.id}`), status),
+      s.memo && h("h1", { class: "slip-memo" }, s.memo),
+      h("div", { class: "muted small" }, "GNOT earned so far"),
+      big,
+      h("div", { class: "bar" }, fill),
+      facts,
+      h("div", { class: "actions" },
+        h("button", { class: "primary", onclick: share }, "Share this payslip"),
+        h("a", { class: "btn", href: wa, target: "_blank", rel: "noopener" }, "Send on WhatsApp"),
+        h("a", { class: "btn", href: `${REALM_URL}:stream/${s.id}`, target: "_blank", rel: "noopener" }, "Verify on gno.land"),
+      ),
+    ),
+  ];
+}
+
 // ---------- router ----------
 
 const routes = { "": ["home", viewHome], new: ["new", viewNew], payroll: ["payroll", viewPayroll], explore: ["explore", viewExplore] };
@@ -550,7 +608,8 @@ let renderSeq = 0;
 
 async function route() {
   const key = location.hash.replace(/^#\/?/, "");
-  const [tab, view] = routes[key] ?? routes[""];
+  const slip = /^s\/(\d+)$/.exec(key);
+  const [tab, view] = slip ? ["explore", () => viewPayslip(Number(slip[1]))] : routes[key] ?? routes[""];
   for (const a of document.querySelectorAll("#nav a")) a.classList.toggle("active", a.dataset.tab === tab);
   const seq = ++renderSeq;
   try {

@@ -1,6 +1,6 @@
 # Trickle
 
-**Money that arrives every second.** Trickle is a payment-streaming protocol for [Gno.land](https://gno.land): lock GNOT once and it unlocks for the recipient continuously. Salaries, grants, vesting with a cliff, subscriptions. The recipient withdraws whenever they like; if the sender cancels, the recipient keeps what has unlocked and only the unearned part goes back.
+**Money that arrives every second: 86,400 paydays a day.** Trickle is a payment-streaming protocol for [Gno.land](https://gno.land): lock GNOT once and it unlocks for the recipient continuously. Salaries, grants, vesting with a cliff, subscriptions. The recipient withdraws whenever they like; if the sender cancels, the recipient keeps what has unlocked and only the unearned part goes back.
 
 Built for the [Gnome Tavern](https://dorahacks.io/hackathon/gnome-tavern/detail) hackathon.
 
@@ -34,6 +34,17 @@ Onyx stores a new package first and activates it once the chain's package approv
 - **Transferable.** The recipient can hand a stream to another address.
 - **Payroll.** One transaction opens up to 50 streams on the same schedule.
 - **Readable on chain.** The realm renders its own pages (home, `:stream/<id>`, `:account/<addr>` with older pages at `:account/<addr>/<page>`) in gnoweb, with progress bars and action links, so it is usable without the web app.
+
+## What is real and what is not
+
+| Part | State |
+|---|---|
+| Package and realm | Real Gno code, tested in CI, submitted to Onyx; live once the chain's package approver enables them (see [Deployment](#deployment)) |
+| Coins | Real testnet GNOT, held by the realm; nothing is simulated |
+| Web app | Reads and writes the chain directly; no backend, no indexer |
+| Demo wallet | A real key generated in your browser and kept in its storage; testnet only |
+| Adena | Supported through its `DoContract` API, not yet tested with the extension |
+| Payslip sharing | A link to a public page; anyone can watch a stream, only the recipient can withdraw |
 
 ## How it is built
 
@@ -117,6 +128,7 @@ gnokey maketx call \
 - **My streams**: incoming and outgoing streams with balances that tick every frame, computed from the on-chain schedule and the chain's clock.
 - **New stream** and **Payroll**: forms that explain the schedule in plain words before you sign.
 - **Explore**: live protocol totals and the latest streams.
+- **Payslips**: every stream has a page at `#/s/<id>` with its earnings ticking in large type, a Share button and a WhatsApp link, so a recipient can watch their pay arrive from a message.
 - **Live wall**: Explore opens with one large number, the GNOT unlocked by the latest streams, moving in real time, with a QR code to open the app on a phone.
 - **Sound and motion**: a chime when a transaction confirms, coins when a withdrawal lands, a drop each time another whole GNOT unlocks. One click in the footer mutes it, and reduced-motion settings are respected.
 - **Wallets**: Adena, or a demo wallet (a throwaway key generated and kept in the browser) so a judge can try it with nothing installed. Fund the demo address from the [faucet](https://faucet.gno.land).
