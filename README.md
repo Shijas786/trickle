@@ -14,6 +14,17 @@ Built for the [Gnome Tavern](https://dorahacks.io/hackathon/gnome-tavern/detail)
 
 Onyx stores a new package first and activates it once the chain's package approver enables it. See [Deployment](#deployment) for how to check the state.
 
+## Verify it in two minutes
+
+| Claim | How to check |
+|---|---|
+| It is deployed on Gno.land testnet | Open the [realm page](https://onyx.testnets.gno.land/r/g1a04glq8w6ts7r9yzyznpa99qkzwp8pewcf3aef/trickle) or run the `qpkgmeta_json` query under [Deployment](#deployment) |
+| The logic is real Gno | [`gno/p/trickle/stream.gno`](gno/p/trickle/stream.gno) and [`gno/r/trickle/trickle.gno`](gno/r/trickle/trickle.gno) |
+| It is tested | `cd gno && gno test ./...`, or the "Gno tests" check on any commit |
+| Money streams per second | Open a stream in the web app and watch the balance tick; the Explore page totals every live stream |
+| Funds cannot be stranded or overdrawn | `TestSolvency`, `TestCreateValidation` and `TestCreateRejectsIntermediaries` in [`trickle_test.gno`](gno/r/trickle/trickle_test.gno) |
+| It works without the web app | Every action is a link on the realm's own gnoweb pages |
+
 ## What it does
 
 - **Streams.** A sender locks a deposit for a recipient with a start, an optional cliff and a duration. The deposit unlocks linearly, one second at a time.
@@ -106,6 +117,8 @@ gnokey maketx call \
 - **My streams**: incoming and outgoing streams with balances that tick every frame, computed from the on-chain schedule and the chain's clock.
 - **New stream** and **Payroll**: forms that explain the schedule in plain words before you sign.
 - **Explore**: live protocol totals and the latest streams.
+- **Live wall**: Explore opens with one large number, the GNOT unlocked by the latest streams, moving in real time, with a QR code to open the app on a phone.
+- **Sound and motion**: a chime when a transaction confirms, coins when a withdrawal lands, a drop each time another whole GNOT unlocks. One click in the footer mutes it, and reduced-motion settings are respected.
 - **Wallets**: Adena, or a demo wallet (a throwaway key generated and kept in the browser) so a judge can try it with nothing installed. Fund the demo address from the [faucet](https://faucet.gno.land).
 
 ## Deployment

@@ -1,4 +1,6 @@
 import * as chain from "./chain.js";
+import qrcode from "qrcode-generator";
+import * as sound from "./sound.js";
 import { NET, REALM_URL } from "./config.js";
 import { wallet, connect, disconnect, restore, onChange, hasAdena } from "./wallet.js";
 
@@ -81,9 +83,11 @@ async function send(label, func, args, sendUgnot = 0) {
   try {
     await w.call(func, args.map(String), sendUgnot);
     toast(label);
+    (func === "Withdraw" ? sound.coins : sound.confirmed)();
     return true;
   } catch (e) {
     toast(e.message || String(e), true);
+    sound.failed();
     return false;
   } finally {
     busy = false;
@@ -311,12 +315,65 @@ async function viewHome() {
   ];
 }
 
+// The live wall: protocol-wide numbers that move, built to be left on a
+// big screen. Everything on it is computed from on-chain stream schedules.
+function liveWall(list) {
+  const total = h("div", { class: "wall-total amount" }, "");
+  const perSec = h("b", {}, "");
+  const active = h("b", {}, "");
+  let lastWhole = null;
+  const update = (t) => {
+    let unlocked = 0, flow = 0, n = 0;
+    for (const s of list) {
+      unlocked += chain.vested(s, Math.floor(t)) ;
+      if (chain.statusOf(s, t) === "streaming") {
+        const r = s.deposit / (s.end - s.start);
+        // Sub-second motion between whole-second chain values.
+        unlocked += r * (t - Math.floor(t));
+        flow += r;
+        n++;
+      }
+    }
+    total.textContent = fmt(unlocked);
+    perSec.textContent = fmt(flow) + " GNOT";
+    active.textContent = n;
+    const whole = Math.floor(unlocked / UGNOT);
+    if (lastWhole !== null && whole > lastWhole) {
+      total.classList.remove("pulse");
+      void total.offsetWidth;
+      total.classList.add("pulse");
+      sound.drop();
+    }
+    lastWhole = whole;
+  };
+  update(now());
+  tickers.add(update);
+
+  const qr = qrcode(0, "M");
+  qr.addData(location.href.split("#")[0]);
+  qr.make();
+  const code = h("div", { class: "qr", title: "Scan to open Trickle on your phone" });
+  code.innerHTML = qr.createSvgTag({ cellSize: 3, margin: 2, scalable: true });
+
+  return h("div", { class: "wall" },
+    h("div", {},
+      h("div", { class: "k" }, "GNOT unlocked by the latest streams"),
+      total,
+      h("div", { class: "wall-sub" }, active, " streams flowing · ", perSec, " every second"),
+    ),
+    h("div", { class: "qr-box" }, code, h("small", {}, "Scan to join")),
+  );
+}
+
 async function viewExplore() {
   const [st, list] = await Promise.all([chain.stats(), chain.latest(50)]);
   clockOffset = st.now - Date.now() / 1000;
   return [
     h("h1", {}, "Live on " + NET.label),
-    h("p", { class: "lead" }, "Every stream is public state in the Trickle realm. These are the latest."),
+    h("p", { class: "lead" }, "Every stream is public state in the ",
+      h("a", { href: REALM_URL, target: "_blank", rel: "noopener" }, "Trickle realm"),
+      ". Nothing here is simulated."),
+    liveWall(list),
     statsRow(st),
     h("h2", {}, "Latest streams"),
     grid(list, "No streams yet. Be the first."),
@@ -513,3 +570,15 @@ setInterval(() => {
 renderWallet();
 route();
 restore();
+
+const muteBtn = $("#mute");
+const paintMute = () => {
+  muteBtn.textContent = sound.isMuted() ? "Sound off" : "Sound on";
+  muteBtn.setAttribute("aria-pressed", String(!sound.isMuted()));
+};
+muteBtn.onclick = () => {
+  sound.setMuted(!sound.isMuted());
+  paintMute();
+  sound.drop();
+};
+paintMute();
