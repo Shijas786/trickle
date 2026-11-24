@@ -37,7 +37,8 @@ function unlock() {
     if (ctx.state === "suspended") ctx.resume();
   } catch {}
 }
-for (const type of ["pointerdown", "keydown"]) window.addEventListener(type, unlock, { passive: true });
+// Touch taps only count as a gesture once the finger lifts.
+for (const type of ["pointerup", "touchend", "click", "keydown"]) window.addEventListener(type, unlock, { passive: true });
 
 function play(notes) {
   if (muted || ctx?.state !== "running") return;
