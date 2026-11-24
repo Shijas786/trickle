@@ -325,12 +325,10 @@ function liveWall(list) {
   const update = (t) => {
     let unlocked = 0, flow = 0, n = 0;
     for (const s of list) {
-      unlocked += chain.vested(s, Math.floor(t)) ;
+      // Same schedule math as the stream cards, so the wall is their sum.
+      unlocked += chain.vested(s, t);
       if (chain.statusOf(s, t) === "streaming") {
-        const r = s.deposit / (s.end - s.start);
-        // Sub-second motion between whole-second chain values.
-        unlocked += r * (t - Math.floor(t));
-        flow += r;
+        flow += s.deposit / (s.end - s.start);
         n++;
       }
     }
